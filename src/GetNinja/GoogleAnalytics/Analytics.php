@@ -1,9 +1,9 @@
 <?php
 
-namespace GetNinja\GoogleAnalytics\Analytics;
+namespace GetNinja\GoogleAnalytics;
 
-use AccountEntry;
-use Buzz\Browser;
+//use GetNinja\GoogleAnalytics\AccountEntry;
+//use GetNinja\GoogleAnalytics\ReportEntry;
 
 class Analytics
 {
@@ -15,12 +15,12 @@ class Analytics
     /**
      * Google Analytics Account Feed URL.
      */
-    const ACCOUNT_FEED_URL = 'https://www.google.com/analytics/feeds/accounts/default';
+    const ACCOUNT_FEED_URL = 'https://www.googleapis.com/analytics/v2.4/management/accounts/';
 
     /**
-     * Google Analytics Account Feed URL.
+     * Google Analytics Account Feed Data URL.
      */
-    const REPORT_FEED_URL = 'https://www.google.com/analytics/feeds/data';
+    const REPORT_DATA_URL = 'https://www.google.com/analytics/feeds/data';
 
     /**
      * Interface Name.
@@ -30,14 +30,7 @@ class Analytics
     /**
      * Dev Mode.
      */
-    const DEV_MODE = false;
-
-    /**
-     * Http Client.
-     *
-     * @var Buzz\Browser
-     */
-    private $httpClient = new Buzz\Browser();
+    const DEV_MODE = true;
 
     /**
      * The auth token.
@@ -79,7 +72,7 @@ class Analytics
      *
      * @var Array
      */
-    private $reportRootParameters = array();
+    private $results = array();
 
     /**
      * Create a new analytics instance.
@@ -114,17 +107,18 @@ class Analytics
      * @param  Int   $maxResults OPTIONAL: Max Results Returned
      * @return Array
      */
-    public function requestAccountData($startIndex= 1, $maxResults = 20)
+    public function requestAccountData($webProperty, $startIndex= 1, $maxResults = 20)
     {
-        $response = $this->httpRequest($this->ACCOUNT_FEED_URL, array(
+        $feedUrl = self::ACCOUNT_FEED_URL.substr($webProperty, 3, (strpos($webProperty, '-', 3) - 3)).'/webproperties/'.$webProperty.'/profiles';
+        $response = self::httpRequest($feedUrl, array(
             'start-index' => $startIndex,
-            'max-results' => $maxIndex
+            'max-results' => $maxResults
         ), 'GET', $this->generateAuthHeader());
 
         if (substr($response['code'], 0, 1) == '2') {
             return $this->accountObjectMapper($response['body']);
         } else {
-            throw new Exception('GoogleAnalytics: Failed to request account data. Error: "'.strip_tags($response['body']).'"');
+            throw new \Exception('GoogleAnalytics: Failed to request account data. Error: "'.strip_tags($response['body']).'"');
         }
     }
 
@@ -215,19 +209,24 @@ class Analytics
         }
         $parameters['start-date'] = $startDate;
 
+        // Format end date
+        if ($endDate == null) {
+            $endDate = date('Y-m-d', strtotime('today'));
+        }
+        $parameters['end-date'] = $endDate;
+
         // Set remaining parameters
-        $parameters['end-date']    = $endDate;
         $parameters['start-index'] = $startIndex;
         $parameters['max-results'] = $maxResults;
-        $parameters['prettyprint'] = $this->devMode ? 'true' : 'false';
+        $parameters['prettyprint'] = self::DEV_MODE ? 'true' : 'false';
 
-        $response = $this->httpRequest($this->reportDataUrl, $parameters, 'GET', $this->generateAuthHeader());
+        $response = self::httpRequest(self::REPORT_DATA_URL, $parameters, 'GET', $this->generateAuthHeader());
 
         // HTTP Response: 2xx
         if (substr($response['code'], 0, 1) == '2') {
             return $this->reportObjectMapper($response['body']);
         } else {
-            throw new Exception('Google Analytics: Failed to request report data. Error: "'.strip_tags($response['body']).'"');
+            throw new \Exception('Google Analytics: Failed to request report data. Error: "'.strip_tags($response['body']).'"');
         }
     }
 
@@ -312,7 +311,7 @@ class Analytics
             $properties['title']   = strval($entry->title);
             $properties['updated'] = strval($entry->updated);
 
-            $results[] = new AnalyticsEntry($properties);
+            $results[] = new AccountEntry($properties);
         }
 
         $this->accountRootParameters = $accountRootParameters;
@@ -331,7 +330,7 @@ class Analytics
     {
         $xml = simplexml_load_string($xmlString);
 
-        $this->results = null;
+        $this->results = array();
         $results = array();
 
         $reportRootParameters = array();
@@ -362,7 +361,7 @@ class Analytics
             $metricValue = strval($aggregateMetric->attributes()->value);
 
             // Check for float, or value with scientific notation
-            if (preg_match('/^(\d+\.\d+)|(\d+E\d+)|\d+.\d+E\d+)$/', $metricValue)) {
+            if (preg_match('/^(\d+\.\d+)|(\d+E\d+)|(\d+.\d+E\d+)$/', $metricValue)) {
                 $reportAggregateMetrics[str_replace('ga:', '', $aggregateMetric->attributes()->name)] = floatval($metricValue);
             } else {
                 $reportAggregateMetrics[str_replace('ga:', '', $aggregateMetric->attributes()->name)] = intval($metricValue);
@@ -376,7 +375,7 @@ class Analytics
                 $metricValue = strval($metric->attributes()->value);
 
                 // Check for float, or value with scientific notation
-                if (preg_match('/^(\d+\.\d+)|(\d+E\d+)|\d+.\d+E\d+)$/', $metricValue)) {
+                if (preg_match('/^(\d+\.\d+)|(\d+E\d+)|(\d+.\d+E\d+)$/', $metricValue)) {
                     $metrics[str_replace('ga:', '', $metric->attributes()->name)] = floatval($metricValue);
                 } else {
                     $metrics[str_replace('ga:', '', $metric->attributes()->name)] = intval($metricValue);
@@ -410,17 +409,17 @@ class Analytics
             'accountType' => 'GOOGLE',
             'Email'       => $email,
             'Passwd'      => $password,
-            'source'      => $this->interfaceName,
+            'source'      => self::INTERFACE_NAME,
             'service'     => 'analytics'
         );
 
-        $response = $this->httpRequest($this->ClientLoginUrl, $postVariables, 'POST');
+        $response = self::httpRequest(self::CLIENT_LOGIN_URL, $postVariables, 'POST');
 
         // Convert newline delimited variables into url format then import to array
         parse_str(str_replace(array("\n", "\r\n"), '&', $response['body']), $authToken);
 
         if (substr($response['code'], 0, 1) != '2' || !is_array($authToken) || empty($authToken['Auth'])) {
-            throw new Exception('Google Analytics: Failed to authenticate user. Error: "'.strip_tags($response['body']).'"');
+            throw new \Exception('Google Analytics: Failed to authenticate user. Error: "'.strip_tags($response['body']).'"');
         }
 
         $this->authToken = $authToken['Auth'];
@@ -444,11 +443,16 @@ class Analytics
      * @param String $method
      * @param Array  $headers
      */
-    public function httpRequest($url, $data = null, $method = 'GET', $headers = null)
+    public function httpRequest($url, $data = null, $method = 'GET', $headers = array())
     {
-        $repsonse = $this->httpClient($url, $data, $method, $headers);
+        $browser = new \Buzz\Browser();
+        $response = $browser->submit($url, $data, $method, $headers);
 
-        print_r($response); die();
+        if ($response) {
+            return array('body' => $response->getContent(), 'code' => $response->getStatusCode());
+        }
+
+        return;
     }
 
     /**
@@ -488,21 +492,21 @@ class Analytics
     public function __call($name, $parameters)
     {
         if (!preg_match('/^get/', $name)) {
-            throw new Exception('No such function "'.$name.'"');
+            throw new \Exception('No such function "'.$name.'"');
         }
 
         $name = lcfirst(preg_replace('/^get/', '', $name));
 
         $parameterKey = array_key_exists($name, $this->reportRootParameters);
         if($parameterKey) {
-            return $this->reportRootParameters[$parameterKey];
+            return $this->reportRootParameters[$name];
         }
 
         $aggregateMetricKey = array_key_exists($name, $this->reportAggregateMetrics);
         if($aggregateMetricKey) {
-            return $this->reportAggregateMetrics[$aggregateMetricKey];
+            return $this->reportAggregateMetrics[$name];
         }
 
-        throw new Exception('No valid root parameter or aggregate metric called "'.$name.'"');
+        throw new \Exception('No valid root parameter or aggregate metric called "'.$name.'"');
     }
 }

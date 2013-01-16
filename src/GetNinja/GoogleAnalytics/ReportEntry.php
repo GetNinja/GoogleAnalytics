@@ -1,6 +1,6 @@
 <?php
 
-namespace GetNinja\GoogleAnalytics\Analytics;
+namespace GetNinja\GoogleAnalytics;
 
 class ReportEntry
 {
@@ -38,7 +38,7 @@ class ReportEntry
     public function __toString()
     {
         if (isset($this->dimensions)) {
-            return implode(' ', $this-dimensions);
+            return implode(' ', $this->dimensions);
         }
 
         return;
@@ -76,21 +76,21 @@ class ReportEntry
     public function __call($name, $parameters)
     {
         if (!preg_match('/^get/', $name)) {
-            throw new Exception('No such function "'.$name.'"');
+            throw new \Exception('No such function "'.$name.'"');
         }
 
         $name = lcfirst(preg_replace('/^get/', '', $name));
 
         $metricKey = array_key_exists($name, $this->metrics);
-        if ($propertyKey) {
-            return $this->metrics[$metricKey];
+        if ($metricKey) {
+            return $this->metrics[$name];
         }
 
         $dimensionKey = array_key_exists($name, $this->dimensions);
         if ($dimensionKey) {
-            return $this->dimensions[$dimensionKey];
+            return $this->dimensions[$name];
         }
 
-        throw new Exception('No valid metric or dimension called "'.$name.'"');
+        throw new \Exception('No valid metric or dimension called "'.$name.'"');
     }
 }

@@ -1,6 +1,6 @@
 <?php
 
-namespace GetNinja\GoogleAnalytics\Analytics;
+namespace GetNinja\GoogleAnalytics;
 
 class AccountEntry
 {
@@ -56,16 +56,16 @@ class AccountEntry
     public function __call($name, $parameters)
     {
         if (!preg_match('/^get/', $name)) {
-            throw new Exception('No such function "'.$name.'"');
+            throw new \Exception('No such function "'.$name.'"');
         }
 
         $name = lcfirst(preg_replace('/^get/', '', $name));
 
         $propertyKey = array_key_exists($name, $this->properties);
         if ($propertyKey) {
-            return $this->properties[$propertyKey];
+            return $this->properties[$name];
         }
 
-        throw new Exception('No valid property called "'.$name.'"');
+        throw new \Exception('No valid property called "'.$name.'"');
     }
 }

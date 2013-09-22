@@ -38,7 +38,7 @@ class ReportEntry
     public function __toString()
     {
         if (isset($this->dimensions)) {
-            return implode(' ', $this-dimensions);
+            return implode(' ', $this->dimensions);
         }
 
         return;
